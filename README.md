@@ -1,5 +1,5 @@
-# Andoe
-**Andoe** is a modern C++ framework for building SSR websites in React-like development experience.
+# Andoe (WIP - most things dont exist yet)
+**Andoe** is a C++ framework for building SSR websites in React-like development experience.
 
 ## Features
 - Lightweight async HTTP server (based on WinSock2).
@@ -9,7 +9,7 @@
 
 ## Build instructions
 ```bash
-meson setup building
+meson setup build
 meson compile -C build
 ```
 
@@ -18,8 +18,15 @@ meson compile -C build
 #include <andoe/server.hpp>
 
 int main() {
-    Andoe::Server server;
-    server.listen(5000);
+  Andoe::Server server;
+
+  if (!server.setup_server(80)) {
+    return 1;
+  }
+
+  server.run();
+
+  return 0;
 }
 ```
 ## Project status
