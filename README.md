@@ -9,7 +9,7 @@
 
 ## Build instructions
 ```bash
-meson setup building
+meson setup build
 meson compile -C build
 ```
 
