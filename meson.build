@@ -9,14 +9,21 @@ inc_app = include_directories('include')
 src_framework = [
   './src/server.cpp',
   './src/framework.cpp',
-  './src/socket.cpp'
+  './src/socket.cpp',
+  './src/router.cpp',
+  './src/response.cpp',
+  './src/request.cpp'
 ]
 
 headers = files(
   'include/andoe/server.hpp',
   'include/andoe/framework.hpp',
   'include/andoe/socket.hpp',
-  'include/andoe/async_model.hpp'
+  'include/andoe/async_model.hpp',
+  'include/andoe/router.hpp',
+  'include/andoe/http_method.hpp',
+  'include/andoe/request.hpp',
+  'include/andoe/response.hpp'
 )
 
 server_lib = static_library('andoe-framework', src_framework, include_directories: inc_framework, install: true)

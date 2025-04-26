@@ -1,5 +1,6 @@
 #pragma once
 
+#include "request.hpp"
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
@@ -37,6 +38,7 @@ class Socket {
 
     Socket(Socket&& other) noexcept;
     Socket& operator=(Socket&& other) noexcept;
+    bool operator==(const Socket& other) const;
 
     /**
      * @brief Creates a socket with the given parameters.
@@ -113,5 +115,13 @@ class Socket {
      * @return True if all data was sent successfully, false otherwise.
      */
     bool send_all(const char* data, size_t length) const;
+
+    /**
+     * @brief Receives data from the socket.
+     * @param buffer The buffer where the received data will be stored.
+     * @param length The size of the buffer.
+     * @return The number of bytes received, or -1 on error.
+     */
+    int recv(char* buffer, size_t length) const;
 };
 }

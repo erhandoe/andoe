@@ -3,6 +3,7 @@
 #include "async_model.hpp"
 #include "framework.hpp"
 #include "socket.hpp"
+#include "router.hpp"
 #include <WinSock2.h>
 
 namespace Andoe {
@@ -47,7 +48,7 @@ public:
   void run();
 
   /**
-   * @brief Sets the asynchronous model used by the server.
+   * @brief Sets the asynchronous model used by the server. DON'T USE. OTHER MODEL NOT DONE.
    * 
    * You can choose between select-based async model or IOCP-based async model.
    * 
@@ -55,10 +56,21 @@ public:
    */
   void set_async_model(AsyncModel model) { asyncModel = model; }
 
+  /**
+   * @brief Get access to the internal Router.
+   */
+  Router& get_router() { return router; }
+
+  /**
+   * @brief Add route to the server's Router
+   */
+  void add_route(HttpMethod method, const std::string& path, RouteHandler handler); 
 private:
-  Andoe::AsyncModel asyncModel = Andoe::AsyncModel::ASYNC_SELECT; ///< The selected async model for handling IO operations. ASYNC_SELECT is default.
+  AsyncModel asyncModel = AsyncModel::ASYNC_SELECT; ///< The selected async model for handling IO operations. ASYNC_SELECT is default.
   Socket serverSocket; ///<Server socket used for accepting incoming connections.
-  
+  Router router;
+  std::vector<Socket> clients;
+
   /**
    * @brief Uses the select() function to handle asynchronous socket operations.
    * 
@@ -66,14 +78,9 @@ private:
    * it accepts the connection and sends a simple HTTP response.
    */
   void run_select();
-
-  /**
-   * @brief Placeholder method for IOCP-based asynchronous socket operations.
-   * 
-   * This method will be implemented when the server switches to IOCP-based async handling.
-   */
-  void run_iocp();
-
+  
+  // TODO
+  void run_iocp() { } ///< Don't use, don't work;
 };
 
 }

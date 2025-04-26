@@ -1,14 +1,12 @@
 #include "server.hpp"
 #include "async_model.hpp"
+#include "http_method.hpp"
 #include <WinSock2.h>
-#include <cstdint>
-#include <errhandlingapi.h>
-#include <handleapi.h>
-#include <ioapiset.h>
-#include <winbase.h>
+#include <algorithm>
 #include <ws2ipdef.h>
 #include <iostream>
 #include <Windows.h>
+#include <sstream>
 
 namespace Andoe {
 
@@ -72,17 +70,23 @@ void Server::run() {
 
 }
 
-void Server::run_select() {
-  fd_set readfds;
 
-  while(true) {
+void Server::run_select() {
+  u_long mode = 1;
+  ioctlsocket(serverSocket.get_handle(), FIONBIO, &mode);
+  // Timeout interval
+  timeval timeout = {1, 0}; // 1 second
+
+  while (true) {
+    fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(serverSocket.get_handle(), &readfds);
 
-    timeval timeout = {1, 0}; // 1 second
-    
+    for (auto& client : clients) {
+      FD_SET(client.get_handle(), &readfds);
+    }
+
     int activity = select(0, &readfds, nullptr, nullptr, &timeout);
-    
     if (activity < 0) {
       std::cerr << "[Server] select() error: " << WSAGetLastError() << std::endl;
       continue;
@@ -96,12 +100,11 @@ void Server::run_select() {
         std::cerr << "[Server] Failed to accept client: " << WSAGetLastError() << std::endl;
         continue;
       }
-
+      // Create a new Socket object for the client and add it to the list of clients
       Socket client(std::move(clientHandle));
-
+      clients.push_back(std::move(client));
       char clientIp[INET6_ADDRSTRLEN] = {};
       uint16_t clientPort = 0;
-
       if (clientAddr.ss_family == AF_INET) {
         sockaddr_in* addr_in = reinterpret_cast<sockaddr_in*>(&clientAddr);
         inet_ntop(AF_INET, &(addr_in->sin_addr), clientIp, INET_ADDRSTRLEN);
@@ -113,56 +116,64 @@ void Server::run_select() {
       }
 
       std::cout << "[Server] New client connected: " << clientIp << ":" << clientPort << std::endl;
+    }
+    
+    std::vector<Socket> closedClients;
 
-      const char* response =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: 13\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        "Hello, World!";
+    for (auto& client : clients) {
+      char buffer[4096] = {};
+      int bytesRead = client.recv(buffer, sizeof(buffer));
+      if (bytesRead == 0) {
+        closedClients.push_back(std::move(client));
+        continue;
+      } 
+      else if (bytesRead < 0) {
+        std::cerr << "[Server] Error receiving data: " << WSAGetLastError() << std::endl;
+        closedClients.push_back(std::move(client));
+        continue;
+      }
+      buffer[bytesRead] = '\0';
 
-      if (!client.send_all(response, strlen(response))) {
-        std::cerr << "[Server] Failed to fully send data." << std::endl;
+      std::string methodStr, path;
+      {
+        std::stringstream requestLine(buffer);
+        requestLine >> methodStr >> path;
       }
 
-      shutdown(client.get_handle(), SD_SEND); 
+      HttpMethod method = HttpMethod::GET;
+      if (methodStr == "GET") method = HttpMethod::GET;
+      else if (methodStr == "POST") method = HttpMethod::POST;
+      else if (methodStr == "PUT") method = HttpMethod::PUT;
+      else if (methodStr == "DELETE") method = HttpMethod::DELETE_;
+      else if (methodStr == "PATCH") method = HttpMethod::PATCH;
+      Request request(method, path);
+      Response response(client);
+
+      bool handled = router.handle(request, response);
+
+      if (!handled) {
+        const char* notFound =
+          "HTTP/1.1 404 Not Found\r\n"
+          "Content-Type: text/plain\r\n"
+          "Content-Length: 9\r\n"
+          "Connection: close\r\n"
+          "\r\n"
+          "Not Found";
+        client.send_all(notFound, strlen(notFound));
+      }
+
+      shutdown(client.get_handle(), SD_SEND);
+      //closedClients.push_back(std::move(client));
+    }
+
+    for (auto& client : closedClients) {
+      shutdown(client.get_handle(), SD_SEND);
+      client.close();
+      clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
     }
   }
 }
-
-void Server::run_iocp() {
-  HANDLE iocpHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
-  if (iocpHandle == nullptr) {
-    std::cerr << "[Server] Failed to create IOCP: " << GetLastError() << std::endl;
-    return;
-  }
-
-  if (CreateIoCompletionPort((HANDLE)serverSocket.get_handle(), iocpHandle, 0, 0) == nullptr) {
-    std::cerr << "[Server] Failed tp associate socket with IOCP: " << GetLastError() << std::endl;
-    return;
-  }
-
-  std::cout << "[Server] IOCP server is ready to accept connections..." << std::endl;
-
-
-  while (true) {
-    DWORD bytesTransferred = 0;
-    ULONG_PTR completionKey = 0;
-    LPOVERLAPPED pOverlapped = nullptr;
-
-    BOOL result = GetQueuedCompletionStatus(iocpHandle, &bytesTransferred, &completionKey, &pOverlapped, INFINITE);
-    if (!result) {
-      std::cerr << "[Server] Failed to get completed IO operation: " << GetLastError() << std::endl;
-      continue;
-    }
-
-  if (bytesTransferred == 0) {
-    std::cerr << "[Server] No bytes transferred. Connection failed or was aborted." << std::endl;
-    continue;
-  }
-
-  std::cout << "[Server] New client connected via IOCP" << std::endl;  } 
+void Server::add_route(HttpMethod method, const std::string& path, std::function<void(Request&, Response&)> handler) {
+    router.add_route(method, path, handler); 
 }
-
 }

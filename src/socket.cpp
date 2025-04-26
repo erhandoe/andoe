@@ -1,4 +1,5 @@
 #include "socket.hpp"
+#include "request.hpp"
 #include <WinSock2.h>
 #include <iostream>
 #include <ws2ipdef.h>
@@ -26,6 +27,10 @@ Socket& Socket::operator=(Socket&& other) noexcept {
     other.socketHandle = INVALID_SOCKET;
   }
   return *this;
+}
+
+bool Socket::operator==(const Socket& other) const {
+  return this->socketHandle == other.socketHandle;
 }
 
 bool Socket::create(int family, int type, int protocol) {
@@ -107,4 +112,19 @@ bool Socket::send_all(const char* data, size_t length) const {
   return true;
 }
 
+int Socket::recv(char* buffer, size_t length) const {
+  if (!is_valid()) {
+    std::cerr << "[Server] Invalid socket handle." << std::endl;
+    return -1;
+  }
+
+  int bytesReceived = ::recv(socketHandle, buffer, static_cast<int>(length), 0);
+  if (bytesReceived == SOCKET_ERROR) {
+    int errorCode = WSAGetLastError();
+    if (errorCode == WSAEWOULDBLOCK) { return 0; }
+      std::cerr << "[Server] Recv failed: " << errorCode << std::endl;
+    }
+
+    return bytesReceived;
+  }
 }
