@@ -32,7 +32,7 @@ int main() {
 ## Project status
 - [x] Basic server startup
 - [x] Async client handling
-- [ ] Routing
+- [x] Routing
 - [ ] Components system
 - [ ] Middleware
 - [ ] Static assets
