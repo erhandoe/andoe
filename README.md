@@ -1,5 +1,5 @@
-# Andoe
-**Andoe** is a modern C++ framework for building SSR websites in React-like development experience.
+# Andoe (WIP - most things dont exist yet)
+**Andoe** is a C++ framework for building SSR websites in React-like development experience.
 
 ## Features
 - Lightweight async HTTP server (based on WinSock2).
