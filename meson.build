@@ -15,7 +15,8 @@ src_framework = [
 headers = files(
   'include/andoe/server.hpp',
   'include/andoe/framework.hpp',
-  'include/andoe/socket.hpp'
+  'include/andoe/socket.hpp',
+  'include/andoe/async_model.hpp'
 )
 
 server_lib = static_library('andoe-framework', src_framework, include_directories: inc_framework, install: true)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "async_model.hpp"
 #include "framework.hpp"
 #include "socket.hpp"
 #include <WinSock2.h>
@@ -15,39 +16,64 @@ namespace Andoe {
  */
 class Server : public Framework {
 public:
-    /**
-     * @brief Constructor for the Server class.
-     * 
-     * Initializes server socket state.
-     */
-    Server();
+  /**
+   * @brief Constructor for the Server class.
+   * 
+   * Initializes server socket state.
+  */
+  Server();
 
-    /**
-     * @brief Destructor for the Server class.
-     * 
-     * Ensures cleanup of server socket resources.
-     */
-    ~Server();
+  /**
+   * @brief Destructor for the Server class.
+   * 
+   * Ensures cleanup of server socket resources.
+   */
+  ~Server();
+  /**
+   * @brief Sets up the server socket to listen on the specified port.
+   * 
+   * Creates the socket, binds it, and prepares it for listening for client connections.
+   * @param port The port number the server should listen on.
+   * @return True if the setup was successful, false otherwise.
+   */
+  bool setup_server(int port);
 
-    /**
-     * @brief Sets up the server socket to listen on the specified port.
-     * 
-     * Creates the socket, binds it, and prepares it for listening for client connections.
-     * @param port The port number the server should listen on.
-     * @return True if the setup was successful, false otherwise.
-     */
-    bool setup_server(int port);
+  /**
+   * @brief Runs the server, accepting incoming client connections.
+   * 
+   * This method continuously accepts incoming client connections and handles them.
+   * The actual handling of requests would be implemented here.
+   */
+  void run();
 
-    /**
-     * @brief Runs the server, accepting incoming client connections.
-     * 
-     * This method continuously accepts incoming client connections and handles them.
-     * The actual handling of requests would be implemented here.
-     */
-    void run();
+  /**
+   * @brief Sets the asynchronous model used by the server.
+   * 
+   * You can choose between select-based async model or IOCP-based async model.
+   * 
+   * @param model The async model to use (`AsyncModel::ASYNC_SELECT` or `AsyncModel::ASYNC_IOCP`).
+   */
+  void set_async_model(AsyncModel model) { asyncModel = model; }
 
 private:
-    Socket serverSocket; ///<Server socket used for accepting incoming connections.
+  Andoe::AsyncModel asyncModel = Andoe::AsyncModel::ASYNC_SELECT; ///< The selected async model for handling IO operations. ASYNC_SELECT is default.
+  Socket serverSocket; ///<Server socket used for accepting incoming connections.
+  
+  /**
+   * @brief Uses the select() function to handle asynchronous socket operations.
+   * 
+   * This method checks the server socket for readability using select(). When a client connects,
+   * it accepts the connection and sends a simple HTTP response.
+   */
+  void run_select();
+
+  /**
+   * @brief Placeholder method for IOCP-based asynchronous socket operations.
+   * 
+   * This method will be implemented when the server switches to IOCP-based async handling.
+   */
+  void run_iocp();
+
 };
 
 }
