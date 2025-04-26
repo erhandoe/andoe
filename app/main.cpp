@@ -1,7 +1,13 @@
-#include "andoe/server.hpp"
+#include <andoe/server.hpp>
 
 int main() {
-  Server server(8080);
-  server.start();
+  Andoe::Server server;
+
+  if (!server.setup_server(80)) {
+    return 1;
+  }
+
+  server.run();
+
   return 0;
 }
