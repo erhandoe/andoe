@@ -3,6 +3,7 @@
 #include "http_method.hpp"
 #include <WinSock2.h>
 #include <algorithm>
+#include <mutex>
 #include <ws2ipdef.h>
 #include <iostream>
 #include <Windows.h>
@@ -70,109 +71,92 @@ void Server::run() {
 
 }
 
+void Server::set_threads_number(size_t numThreads) {
+  auto maxThreads = static_cast<size_t>(std::thread::hardware_concurrency());
+  if (maxThreads == 0) { maxThreads = 1; }
+  #undef min
+  threadsNumber = std::min(numThreads, maxThreads);
+  threadPool.set_mode(ThreadPoolMode::Fixed);
+  threadPool.resize(threadsNumber);
+}
+
 
 void Server::run_select() {
   u_long mode = 1;
   ioctlsocket(serverSocket.get_handle(), FIONBIO, &mode);
-  // Timeout interval
-  timeval timeout = {1, 0}; // 1 second
 
   while (true) {
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    FD_SET(serverSocket.get_handle(), &readfds);
+    fd_set readSet;
+    FD_ZERO(&readSet);
 
-    for (auto& client : clients) {
-      FD_SET(client.get_handle(), &readfds);
+    SOCKET serverHandle = serverSocket.get_handle();
+    FD_SET(serverHandle, &readSet);
+    SOCKET maxFd = serverHandle;
+
+    for (auto &clientPtr : clients) {
+      SOCKET h = clientPtr->get_handle();
+      FD_SET(h, &readSet);
+      if (h > maxFd) maxFd = h;
     }
 
-    int activity = select(0, &readfds, nullptr, nullptr, &timeout);
-    if (activity < 0) {
-      std::cerr << "[Server] select() error: " << WSAGetLastError() << std::endl;
-      continue;
+    timeval timeout {1, 0}; // 1 second
+    int count = select(int(maxFd + 1), &readSet, nullptr, nullptr, &timeout);
+    if (count == SOCKET_ERROR) {
+      std::cerr << "select() error: " << WSAGetLastError() << std::endl;
+      return;
     }
 
-    if (FD_ISSET(serverSocket.get_handle(), &readfds)) {
-      sockaddr_storage clientAddr;
-      int clientAddrSize = sizeof(clientAddr);
-      SOCKET clientHandle = accept(serverSocket.get_handle(), reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrSize);
-      if (clientHandle == INVALID_SOCKET) {
-        std::cerr << "[Server] Failed to accept client: " << WSAGetLastError() << std::endl;
-        continue;
+    if (FD_ISSET(serverHandle, &readSet)) {
+       if (!serverSocket.is_valid()) {
+          std::cerr << "Server socket is not valid before accepting connection!" << std::endl;
+          continue;
+       }
+      sockaddr_in6 clientAddr;
+      int addrSize = sizeof(clientAddr);
+      SOCKET clientHandle = serverSocket.accept_connection(
+          (sockaddr*)&clientAddr, &addrSize);
+      if (clientHandle != INVALID_SOCKET) {
+        clients.push_back(std::make_shared<Socket>(clientHandle));
       }
-      // Create a new Socket object for the client and add it to the list of clients
-      Socket client(std::move(clientHandle));
-      clients.push_back(std::move(client));
-      char clientIp[INET6_ADDRSTRLEN] = {};
-      uint16_t clientPort = 0;
-      if (clientAddr.ss_family == AF_INET) {
-        sockaddr_in* addr_in = reinterpret_cast<sockaddr_in*>(&clientAddr);
-        inet_ntop(AF_INET, &(addr_in->sin_addr), clientIp, INET_ADDRSTRLEN);
-        clientPort = ntohs(addr_in->sin_port);
-      } else if (clientAddr.ss_family == AF_INET6) {
-        sockaddr_in6* addr_in6 = reinterpret_cast<sockaddr_in6*>(&clientAddr);
-        inet_ntop(AF_INET6, &(addr_in6->sin6_addr), clientIp, INET6_ADDRSTRLEN);
-        clientPort = ntohs(addr_in6->sin6_port);
+      else {
+        std::cerr << "Failed to accept connection: " << WSAGetLastError() << std::endl;
       }
-
-      std::cout << "[Server] New client connected: " << clientIp << ":" << clientPort << std::endl;
-    }
-    
-    std::vector<Socket> closedClients;
-
-    for (auto& client : clients) {
-      char buffer[4096] = {};
-      int bytesRead = client.recv(buffer, sizeof(buffer));
-      if (bytesRead == 0) {
-        closedClients.push_back(std::move(client));
-        continue;
-      } 
-      else if (bytesRead < 0) {
-        std::cerr << "[Server] Error receiving data: " << WSAGetLastError() << std::endl;
-        closedClients.push_back(std::move(client));
-        continue;
-      }
-      buffer[bytesRead] = '\0';
-
-      std::string methodStr, path;
-      {
-        std::stringstream requestLine(buffer);
-        requestLine >> methodStr >> path;
-      }
-
-      HttpMethod method = HttpMethod::GET;
-      if (methodStr == "GET") method = HttpMethod::GET;
-      else if (methodStr == "POST") method = HttpMethod::POST;
-      else if (methodStr == "PUT") method = HttpMethod::PUT;
-      else if (methodStr == "DELETE") method = HttpMethod::DELETE_;
-      else if (methodStr == "PATCH") method = HttpMethod::PATCH;
-      Request request(method, path);
-      Response response(client);
-
-      bool handled = router.handle(request, response);
-
-      if (!handled) {
-        const char* notFound =
-          "HTTP/1.1 404 Not Found\r\n"
-          "Content-Type: text/plain\r\n"
-          "Content-Length: 9\r\n"
-          "Connection: close\r\n"
-          "\r\n"
-          "Not Found";
-        client.send_all(notFound, strlen(notFound));
-      }
-
-      shutdown(client.get_handle(), SD_SEND);
-      //closedClients.push_back(std::move(client));
     }
 
-    for (auto& client : closedClients) {
-      shutdown(client.get_handle(), SD_SEND);
-      client.close();
-      clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
+    std::vector<std::shared_ptr<Socket>> stillConnected;
+    for (auto &clientPtr : clients) {
+      SOCKET handle = clientPtr->get_handle();
+      if (FD_ISSET(handle, &readSet)) {
+        auto clientCopy = clientPtr;
+        threadPool.enqueue_task([this, clientCopy] {
+          handle_client(clientCopy);
+        });
+      } else {
+        stillConnected.push_back(clientPtr);
+      }
     }
+    clients.swap(stillConnected);
   }
 }
+
+void Server::handle_client(std::shared_ptr<Socket> client) {
+  char buffer[8192] = {};   
+  int bytes = client->recv(buffer, sizeof(buffer)); 
+  if (bytes <= 0) { 
+    return;
+  }
+
+  Request request;
+  Response response(*client);
+
+  request.set_raw_data(buffer, bytes);
+
+  if (!router.handle(request, response)) {
+    response.text(404, "Not Found");
+  }
+}
+
+
 void Server::add_route(HttpMethod method, const std::string& path, std::function<void(Request&, Response&)> handler) {
     router.add_route(method, path, handler); 
 }

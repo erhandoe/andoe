@@ -41,12 +41,16 @@ class Response {
      */
     void send_content(int code, const std::string& contentType, const std::string& body);
 
+    bool was_sent() const;
+
   private:
     /**
      * @brief Sends response.
      * @param body The content to send
      */
     void send();
+    
+    bool sent = false;
 
     Socket& socket;
     int statusCode = 200;

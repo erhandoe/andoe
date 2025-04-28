@@ -4,15 +4,15 @@
 int main() {
   Andoe::Server server;
   
+  //server.set_threads_number(3);
+
   // Set up a route for the root path (GET "/")
   server.add_route(Andoe::HttpMethod::GET, "/", [](Andoe::Request& req, Andoe::Response& res) {
-    std::cout << "[Server] Handling GET /" << std::endl;
     res.text(200, "Welcome to Andoe!"); // Sending a simple text response
   });
 
   // Set up a route for "/about" (GET "/about")
   server.add_route(Andoe::HttpMethod::GET, "/about", [](Andoe::Request& req, Andoe::Response& res) {
-    std::cout << "[Server] Handling GET /about" << std::endl;
     res.html(200, "<body><h1>About Andoe: A modern C++ framework for SSR websites.</h1></body>");
   });
 

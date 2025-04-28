@@ -15,6 +15,7 @@ void Response::send() {
     body;
   
   socket.send_all(response.c_str(), response.size());
+  sent = true;
   shutdown(socket.get_handle(), SD_SEND);
 }
 
@@ -35,6 +36,10 @@ void Response::send_content(int code, const std::string& type, const std::string
   contentType = type;
   body = bodyContent;
   send();
+}
+
+bool Response::was_sent() const {
+  return sent;
 }
 
 }
