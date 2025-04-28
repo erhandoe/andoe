@@ -16,6 +16,7 @@ ThreadPool::ThreadPool()
   highThreshold(8),
   lowThreshold(2) {
     auto n = std::thread::hardware_concurrency();
+    //auto n = 100;
     if (n == 0) {
       std::cerr << "Couldn't find number of cores, setting maxThreads to 2. It's reccomended to go to fixed threading.";
     }
@@ -123,7 +124,7 @@ void ThreadPool::resize(size_t newSize) {
 
 void ThreadPool::resize_worker() {
   while (!resizeStop) {  
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     size_t taskCount = taskQueue.size();
 
     if (mode == ThreadPoolMode::Dynamic) {

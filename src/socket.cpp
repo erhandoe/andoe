@@ -84,7 +84,7 @@ bool Socket::listen_socket(int backlog) {
 SOCKET Socket::accept_connection(sockaddr* clientAddr, int* clientAddrSize) {
   SOCKET clientSocket = ::accept(socketHandle, clientAddr, clientAddrSize);
   if (clientSocket == INVALID_SOCKET) {
-    std::cerr << "[Server] accept() failed with error: " << WSAGetLastError() << std::endl;
+    //std::cerr << "[Server] accept() failed with error: " << WSAGetLastError() << std::endl;
   } 
   return clientSocket;
 }

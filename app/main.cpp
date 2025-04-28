@@ -4,7 +4,7 @@
 int main() {
   Andoe::Server server;
   
-  //server.set_threads_number(3);
+  //server.set_threads_number(12);
 
   // Set up a route for the root path (GET "/")
   server.add_route(Andoe::HttpMethod::GET, "/", [](Andoe::Request& req, Andoe::Response& res) {

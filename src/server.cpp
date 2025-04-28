@@ -4,6 +4,7 @@
 #include <WinSock2.h>
 #include <algorithm>
 #include <mutex>
+#include <winerror.h>
 #include <ws2ipdef.h>
 #include <iostream>
 #include <Windows.h>
@@ -84,6 +85,7 @@ void Server::set_threads_number(size_t numThreads) {
 void Server::run_select() {
   u_long mode = 1;
   ioctlsocket(serverSocket.get_handle(), FIONBIO, &mode);
+  int tickCounter = 0;
 
   while (true) {
     fd_set readSet;
@@ -103,10 +105,11 @@ void Server::run_select() {
     int count = select(int(maxFd + 1), &readSet, nullptr, nullptr, &timeout);
     if (count == SOCKET_ERROR) {
       std::cerr << "select() error: " << WSAGetLastError() << std::endl;
-      return;
+      continue;
     }
 
     if (FD_ISSET(serverHandle, &readSet)) {
+      
        if (!serverSocket.is_valid()) {
           std::cerr << "Server socket is not valid before accepting connection!" << std::endl;
           continue;
@@ -119,31 +122,50 @@ void Server::run_select() {
         clients.push_back(std::make_shared<Socket>(clientHandle));
       }
       else {
-        std::cerr << "Failed to accept connection: " << WSAGetLastError() << std::endl;
+        int err = WSAGetLastError ();
+        if (err == WSAEWOULDBLOCK) {
+          continue;
+        } else {
+          std::cerr << "Failed to accept connection: " << WSAGetLastError() << std::endl;
+          continue;
+        }
       }
+      
     }
 
     std::vector<std::shared_ptr<Socket>> stillConnected;
-    for (auto &clientPtr : clients) {
-      SOCKET handle = clientPtr->get_handle();
-      if (FD_ISSET(handle, &readSet)) {
-        auto clientCopy = clientPtr;
-        threadPool.enqueue_task([this, clientCopy] {
-          handle_client(clientCopy);
-        });
-      } else {
-        stillConnected.push_back(clientPtr);
+    {
+      std::lock_guard<std::mutex> lock(clientMutex);
+      for (auto &clientPtr : clients) {
+        SOCKET handle = clientPtr->get_handle();
+        if (FD_ISSET(handle, &readSet)) {
+          auto clientCopy = clientPtr;
+          threadPool.enqueue_task([this, clientCopy] {
+            if (!handle_client(clientCopy)) {
+              clientCopy->close();
+            }
+          });
+        } else {
+          if (clientPtr->is_valid()) {
+            stillConnected.push_back(clientPtr);
+          }
+          else {
+            clientPtr->close();
+          }
+        }
       }
     }
     clients.swap(stillConnected);
   }
 }
 
-void Server::handle_client(std::shared_ptr<Socket> client) {
+bool Server::handle_client(std::shared_ptr<Socket> client) {
   char buffer[8192] = {};   
   int bytes = client->recv(buffer, sizeof(buffer)); 
-  if (bytes <= 0) { 
-    return;
+  if (bytes <= 0) {
+    client->close();
+    client.reset();
+    return false;
   }
 
   Request request;
@@ -154,6 +176,7 @@ void Server::handle_client(std::shared_ptr<Socket> client) {
   if (!router.handle(request, response)) {
     response.text(404, "Not Found");
   }
+  return true;
 }
 
 

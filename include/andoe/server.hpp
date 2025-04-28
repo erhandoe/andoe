@@ -7,6 +7,7 @@
 #include "thread_pool.hpp"
 #include <WinSock2.h>
 #include <cwchar>
+#include <unordered_set>
 
 namespace Andoe {
 
@@ -85,7 +86,7 @@ class Server : public Framework {
     void run_select();
     void run_iocp() { } ///< Don't use, don't work; TODO
     
-    void handle_client(std::shared_ptr<Socket> client);
+    bool handle_client(std::shared_ptr<Socket> client);
 };
 
 }
