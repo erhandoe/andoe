@@ -1,3 +1,4 @@
+#include "andoe/async_model.hpp"
 #include <andoe/server.hpp>
 #include <iostream>
 
@@ -5,7 +6,7 @@ int main() {
   Andoe::Server server;
   
   //server.set_threads_number(12);
-
+  server.set_async_model(Andoe::AsyncModel::ASYNC_IOCP);
   // Set up a route for the root path (GET "/")
   server.add_route(Andoe::HttpMethod::GET, "/", [](Andoe::Request& req, Andoe::Response& res) {
     res.text(200, "Welcome to Andoe!"); // Sending a simple text response

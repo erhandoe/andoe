@@ -84,9 +84,11 @@ class Server : public Framework {
     size_t threadsNumber = 1;
 
     void run_select();
-    void run_iocp() { } ///< Don't use, don't work; TODO
+    void run_iocp(); ///< Don't use, don't work; TODO
     
     bool handle_client(std::shared_ptr<Socket> client);
+
+    HANDLE iocpHandle = nullptr;
 };
 
 }

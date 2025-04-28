@@ -3,8 +3,15 @@
 #include "http_method.hpp"
 #include <WinSock2.h>
 #include <algorithm>
+#include <basetsd.h>
+#include <handleapi.h>
+#include <ioapiset.h>
+#include <minwinbase.h>
 #include <mutex>
+#include <objidlbase.h>
+#include <synchapi.h>
 #include <winerror.h>
+#include <winnt.h>
 #include <ws2ipdef.h>
 #include <iostream>
 #include <Windows.h>
@@ -48,6 +55,14 @@ bool Server::setup_server(int port) {
     return false;
   }
 
+  if (asyncModel == AsyncModel::ASYNC_IOCP) {
+    iocpHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
+    if (iocpHandle == nullptr) {
+      std::cerr << "[Server] Failed to create IOCP handle." << std::endl;
+      return false;
+    }
+  }
+
   std::cout << "[ANDOE] Server is listening on port " << port << "..." << std::endl;
   return true;
 }
@@ -85,7 +100,6 @@ void Server::set_threads_number(size_t numThreads) {
 void Server::run_select() {
   u_long mode = 1;
   ioctlsocket(serverSocket.get_handle(), FIONBIO, &mode);
-  int tickCounter = 0;
 
   while (true) {
     fd_set readSet;
@@ -126,7 +140,7 @@ void Server::run_select() {
         if (err == WSAEWOULDBLOCK) {
           continue;
         } else {
-          std::cerr << "Failed to accept connection: " << WSAGetLastError() << std::endl;
+          std::cerr << "[Server] Failed to accept connection: " << WSAGetLastError() << std::endl;
           continue;
         }
       }
@@ -159,7 +173,43 @@ void Server::run_select() {
   }
 }
 
+struct IoContext {
+  OVERLAPPED ov;    // must be zero-initialized
+  WSABUF     wsabuf;
+  char       buffer[8192];
+};
+
+
+
 bool Server::handle_client(std::shared_ptr<Socket> client) {
+  if (asyncModel == AsyncModel::ASYNC_IOCP) {
+    DWORD bytesTransfered;
+    ULONG_PTR completionKey;
+    LPOVERLAPPED overlapped;
+    BOOL ok = GetQueuedCompletionStatus(iocpHandle, &bytesTransfered, &completionKey, &overlapped, INFINITE);
+    if (!ok || bytesTransfered == 0) {
+      if (overlapped) {
+        auto* ctx = CONTAINING_RECORD(overlapped, IoContext, ov);
+        delete ctx;
+      }
+      client->close();
+      client.reset();
+      return false;
+    }
+
+    auto* ctx = CONTAINING_RECORD(overlapped, IoContext, ov);
+
+    Request request;
+    Response response(*client);
+    request.set_raw_data(ctx->buffer, bytesTransfered);
+
+    if(!router.handle(request, response)) {
+      response.text(404, "Not Found");
+    }
+    delete ctx;
+    return true;
+  }
+
   char buffer[8192] = {};   
   int bytes = client->recv(buffer, sizeof(buffer)); 
   if (bytes <= 0) {
@@ -182,5 +232,57 @@ bool Server::handle_client(std::shared_ptr<Socket> client) {
 
 void Server::add_route(HttpMethod method, const std::string& path, std::function<void(Request&, Response&)> handler) {
     router.add_route(method, path, handler); 
+}
+
+void Server::run_iocp() {
+  u_long mode = 1;
+  ioctlsocket(serverSocket.get_handle(), FIONBIO, &mode);
+
+  sockaddr_in6 clientAddr;
+  int addrSize = sizeof(clientAddr);
+
+  while (true) {
+    SOCKET clientHandle = serverSocket.accept_connection((sockaddr*)&clientAddr, &addrSize);
+    if (clientHandle == INVALID_SOCKET) {
+      int err = WSAGetLastError();
+      if (err == WSAEWOULDBLOCK) {
+        Sleep(1);
+        continue;
+      }
+      std::cerr << "[Server] Failed to accept connection: " << WSAGetLastError() << std::endl;
+      continue;
+    }
+
+    //HANDLE clientIoCompletionPort = CreateIoCompletionPort((HANDLE)clientHandle, iocpHandle, (ULONG_PTR)clientHandle, 0);
+
+    if (!CreateIoCompletionPort((HANDLE)clientHandle, iocpHandle, (ULONG_PTR)clientHandle, 0)) {
+      std::cerr << "[Server] Failed to associate client socket with IOCP: " << WSAGetLastError() << std::endl;
+      closesocket(clientHandle);
+      continue;
+    }
+
+    auto* ctx = new IoContext{};
+    ctx->wsabuf.buf = ctx->buffer;
+    ctx->wsabuf.len = sizeof(ctx->buffer);
+    ZeroMemory(&ctx->ov, sizeof(ctx->ov));
+
+    DWORD flags = 0;
+    int r = WSARecv(clientHandle, &ctx->wsabuf, 1, nullptr, &flags, &ctx->ov, nullptr);
+    if (r == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING) {
+      std::cerr << "[Server] WSARecv failed: " << WSAGetLastError() << std::endl;
+      delete ctx;
+      closesocket(clientHandle);
+      continue;
+    }
+    
+    auto client = std::make_shared<Socket>(clientHandle);
+    threadPool.enqueue_task([this,client] {
+
+      if (!handle_client(client)) {
+        client->close();
+      }
+    });
+
+  }
 }
 }

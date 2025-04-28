@@ -57,6 +57,8 @@ class ThreadPool {
     size_t minThreads;
     size_t highThreshold;
     size_t lowThreshold;
+    size_t resizeTaskQueueSize;
+    size_t resizeTaskCount;
 
     std::thread resizeThread;
     std::mutex modeMutex;

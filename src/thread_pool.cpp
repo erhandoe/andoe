@@ -3,7 +3,6 @@
 #include <mutex>
 #include <algorithm>
 #include <iostream>
-#include <stdexcept>
 #include <thread>
 
 namespace Andoe {
@@ -14,7 +13,9 @@ ThreadPool::ThreadPool()
   mode(ThreadPoolMode::Dynamic),
   minThreads(1),
   highThreshold(8),
-  lowThreshold(2) {
+  lowThreshold(2),
+  resizeTaskQueueSize(0),
+  resizeTaskCount(0) {
     auto n = std::thread::hardware_concurrency();
     //auto n = 100;
     if (n == 0) {
@@ -60,7 +61,6 @@ void ThreadPool::enqueue_task(std::function<void()> task) {
 
 void ThreadPool::worker_thread() {
   while (!stop) {
-    //std::cout << "TEST1 " << "workers: " << workers.size() << std::endl;
     std::function<void()> task;
     {
       std::unique_lock<std::mutex> lock(queueMutex);
@@ -71,11 +71,17 @@ void ThreadPool::worker_thread() {
       taskQueue.pop();
     }
     if(!task) {
-      //std::cout << "[ThreadPool] Worker received exit signal.\n";
       worker_exit();
       return;
     }
-    task();
+    try {
+      task();
+    } catch (std::exception& e) {
+      std::cerr << "[ThreadPool] Task threw exception: " << e.what() << std::endl;
+    } catch (...) {
+      std::cerr << "[ThreadPool] Task threw an unknown exception\n";
+    }
+    //task();
   }
 }
 
@@ -108,7 +114,8 @@ void ThreadPool::resize(size_t newSize) {
   size_t current = workers.size();
 
   if (newSize > current) {
-    for (size_t i = 0; i < (newSize - current); ++i) {
+    size_t threadsToAdd = std::min(newSize - current, static_cast<size_t>(2));
+    for (size_t i = 0; i < threadsToAdd; ++i) {
       workers.emplace_back(&ThreadPool::worker_thread, this);
     }
   }
@@ -124,18 +131,27 @@ void ThreadPool::resize(size_t newSize) {
 
 void ThreadPool::resize_worker() {
   while (!resizeStop) {  
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     size_t taskCount = taskQueue.size();
+
+    if (taskCount != resizeTaskQueueSize) {
+      resizeTaskCount = 0;
+    }
+
+    if (resizeTaskCount < 5) {
+      resizeTaskCount++;
+      resizeTaskQueueSize = taskCount;
+    }
 
     if (mode == ThreadPoolMode::Dynamic) {
       if (taskCount > highThreshold) {
-        size_t newThreads = workers.size() + 1;
+        size_t newThreads = workers.size() + 2;
         if (newThreads <= maxThreads) {
           resize(newThreads);
         }
       }
       else if (taskCount < lowThreshold && workers.size() > minThreads) {
-        size_t newThreads = workers.size() - 1;
+        size_t newThreads = workers.size() - 2;
         if (newThreads >= minThreads) {
           resize(newThreads);
         }
