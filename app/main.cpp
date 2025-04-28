@@ -1,4 +1,3 @@
-#include "andoe/async_model.hpp"
 #include <andoe/server.hpp>
 #include <iostream>
 

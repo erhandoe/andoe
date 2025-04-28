@@ -126,7 +126,7 @@ void ThreadPool::resize(size_t newSize) {
     }
   }
 
-  std::cout << "[ThreadPool] Resizing thread pool to " << newSize << " threads." << std::endl;
+  //std::cout << "[ThreadPool] Resizing thread pool to " << newSize << " threads." << std::endl;
 }
 
 void ThreadPool::resize_worker() {
