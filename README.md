@@ -16,16 +16,21 @@ meson compile -C build
 ## Example usage
 ```cpp
 #include <andoe/server.hpp>
+#include <iostream>
 
 int main() {
   Andoe::Server server;
+  
+  server.add_route(Andoe::HttpMethod::GET, "/", [](Andoe::Request& req, Andoe::Response& res) {
+    res.text(200, "Welcome to Andoe!"); // Sending a simple text response
+  });
 
   if (!server.setup_server(80)) {
+    std::cerr << "[Server] Failed to set up server." << std::endl;
     return 1;
   }
 
   server.run();
-
   return 0;
 }
 ```
