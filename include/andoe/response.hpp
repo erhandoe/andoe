@@ -11,28 +11,35 @@ namespace Andoe {
 class Response {
   public:
     explicit Response(Socket& clientSocket);
-       
+
     /**
      * @brief send_content shortcut for plain text.
      * @param code HTTP code for response.
      * @param body Body of the response.
      */
     void text(int code, const std::string& body);
-    
+
     /**
      * @brief send_content shortcut for html.
      * @param code HTTP code for response.
      * @param body Body of the response.
      */
     void html(int code, const std::string& body);
-    
+
     /**
      * @brief send_content shortcut for JSON.
      * @param code HTTP code for response.
      * @param body Body of the response.
      */
     void json(int code, const std::string& body);
-    
+
+    /**
+     * @brief send_content shortcut for static files.
+     * @param code HTTP code for response.
+     * @param path Path to the file to send.
+     */
+    void static_file(int code, const std::string& path);
+
     /**
      * @brief Send content as response with provided type
      * @param code HTTP code for response.
@@ -49,7 +56,7 @@ class Response {
      * @param body The content to send
      */
     void send();
-    
+
     bool sent = false;
 
     Socket& socket;

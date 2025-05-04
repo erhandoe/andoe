@@ -1,33 +1,38 @@
-#include <andoe/server.hpp>
+#include "andoe/htmlTagFactories.hpp"
+#include <andoe/andoe.hpp>
 #include <iostream>
+
+using namespace Andoe::Html;
 
 int main() {
   Andoe::Server server;
-  
-  //server.set_threads_number(12);
-  server.set_async_model(Andoe::AsyncModel::ASYNC_IOCP);
-  // Set up a route for the root path (GET "/")
+
   server.add_route(Andoe::HttpMethod::GET, "/", [](Andoe::Request& req, Andoe::Response& res) {
-    res.text(200, "Welcome to Andoe!"); // Sending a simple text response
-  });
+    auto page = HtmlElement("html", {
+        Head({
+          Title("Main Site"),
+          Meta().attr("description", "Test uwu")
+        }),
+        Body({
+          Div({
+            H1("Welcome to the Main Site"),
+            P("This is the main site.")
+          }),
+          Div({
+            H2("About"),
+            P("This is the main site.")
+          })
+        })
+      });
 
-  // Set up a route for "/about" (GET "/about")
-  server.add_route(Andoe::HttpMethod::GET, "/about", [](Andoe::Request& req, Andoe::Response& res) {
-    res.html(200, "<body><h1>About Andoe: A modern C++ framework for SSR websites.</h1></body>");
+    res.html(200, page.str());
   });
-
-  // Set up a route for "/json" (GET "/json")
-  server.add_route(Andoe::HttpMethod::GET, "/json", [](Andoe::Request& req, Andoe::Response& res) {
-    res.json(200, "{\"message\": \"This is a JSON response!\"}");
-  });
-
-  // Start the server and listen on port 5000
   if (!server.setup_server(5000)) {
     std::cerr << "[Server] Failed to set up server." << std::endl;
     return 1;
   }
 
-  server.run(); // Start the server's event loop
+  server.run();
 
   return 0;
 }

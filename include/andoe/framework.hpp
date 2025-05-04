@@ -2,14 +2,13 @@
 
 #include <WinSock2.h>
 #include <WS2tcpip.h>
-#include <memory>
 
 namespace Andoe {
 
 /**
  * @brief Handles initialization and cleanup of the networking framework.
- * 
- * Manages Winsock startup and shutdown, and automatically handles 
+ *
+ * Manages Winsock startup and shutdown, and automatically handles
  * safe closing of a server socket.
  */
 class Framework {
@@ -25,7 +24,7 @@ class Framework {
 
     /**
      * @brief Initializes Winsock.
-     * 
+     *
      * Must be called before starting network operations.
      * @return True if initialized successfully, false otherwise.
      */
@@ -37,7 +36,7 @@ class Framework {
     void cleanup();
   private:
     WSADATA wsaData; ///< Winsock data structure
-    bool initialized = false; ///<Tracks if Winsock was successfully initialized.    
+    bool initialized = false; ///<Tracks if Winsock was successfully initialized.
 };
 
 }

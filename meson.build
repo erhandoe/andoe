@@ -13,7 +13,9 @@ src_framework = [
   './src/router.cpp',
   './src/response.cpp',
   './src/request.cpp',
-  './src/thread_pool.cpp'
+  './src/thread_pool.cpp',
+  './src/htmlElement.cpp',
+  './src/static.cpp'
 ]
 
 headers = files(
@@ -25,11 +27,15 @@ headers = files(
   'include/andoe/http_method.hpp',
   'include/andoe/request.hpp',
   'include/andoe/response.hpp',
-  'include/andoe/thread_pool.hpp'
+  'include/andoe/thread_pool.hpp',
+  'include/andoe/htmlElement.hpp',
+  'include/andoe/andoe.hpp',
+  'include/andoe/htmlTagFactories.hpp',
+  'include/andoe/static.hpp'
 )
 
 server_lib = static_library('andoe-framework', src_framework, include_directories: inc_framework, install: true)
 
-install_headers(headers, subdir: 'uwu')
+install_headers(headers, subdir: 'andoe')
 
 subdir('app')
