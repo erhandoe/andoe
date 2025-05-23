@@ -1,4 +1,4 @@
-# Andoe (WIP - most things dont exist yet)
+# Andoe (WIP)
 **Andoe** is a C++ framework for building SSR websites in React-like development experience.
 
 ## Features
